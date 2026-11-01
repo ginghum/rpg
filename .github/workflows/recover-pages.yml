@@ -1,0 +1,39 @@
+name: Recover stalled Pages deployment
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/recover-pages.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  actions: write
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Cancel obsolete deployment and its queued retry
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          node --input-type=module <<'JS'
+          const root = 'https://api.github.com/repos/' + process.env.GH_REPO;
+          const headers = {
+            Authorization: 'Bearer ' + process.env.GH_TOKEN,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2026-03-10'
+          };
+          const requests = [
+            ['/pages/deployments/337c915a0227bf18528cebcc161a70f3fe84afd2/cancel', [204, 400, 404, 409, 422]],
+            ['/actions/runs/41288610167/cancel', [202, 404, 409]]
+          ];
+          for (const [path, accepted] of requests) {
+            const response = await fetch(root + path, {method: 'POST', headers});
+            console.log(path + ': HTTP ' + response.status);
+            if (!accepted.includes(response.status)) {
+              throw new Error('Could not cancel obsolete Pages work: HTTP ' + response.status);
+            }
+          }
+          JS
