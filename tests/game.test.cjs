@@ -24,5 +24,23 @@ function boot(seed){
  function walkTo(g,x,y){for(let limit=0;limit<1000;limit++){const p=g.snap().player,dx=x-p.x,dy=y-p.y;if(Math.abs(dx)<8&&Math.abs(dy)<8)return;g.key(Math.abs(dx)>8?(dx>0?'d':'a'):(dy>0?'s':'w'),.04);if(g.snap().modal==='down')throw Error('unexpected defeat');}throw Error('unreachable '+x+','+y+' from '+JSON.stringify(g.snap().player));}
  rich.click('menuBtn');rich.act('enter:1');for(let f=1;f<=3;f++){walkTo(rich,6*48+24,6*48+24);walkTo(rich,18*48+24,6*48+24);walkTo(rich,29*48+24,6*48+24);walkTo(rich,29*48+24,19*48+24);rich.tick(6);if(f===3){for(let n=0;n<100&&!rich.snap().state.cleared;n++){const boss=rich.snap().enemyDetails.find(e=>e.type===3);if(!boss)break;if(Math.hypot(boss.x-rich.snap().player.x,boss.y-rich.snap().player.y)>95)walkTo(rich,Math.round(boss.x),Math.round(boss.y));rich.tick(.5);}}if(f<3){walkTo(rich,30*48+24,21*48+24);rich.key('e',.04);assert.equal(rich.snap().modal,'stairs');rich.act('enter:'+(f+1));}else{assert.ok(rich.snap().state.cleared,'boss can be defeated');assert.ok(rich.snap().state.owned.includes('guardian'),'boss gives unique weapon');}}
  rich.click('returnBtn');rich.act('town');const saved=JSON.parse(rich.storage.get('ember-below-v1'));const resumed=boot(saved);await resumed.ready();assert.ok(resumed.snap().state.cleared);assert.equal(resumed.snap().floor,0);assert.ok(resumed.snap().state.upgrade.spear);
+
+ // Old saves migrate into the new hunting loop; no story progress is granted there.
+ const hunterSeed={...seed,lv:50,owned:['sword','staff'],weapon:'staff',cleared:false,counts:{slimes:0,bones:0,rescue:0,guardian:0}};
+ delete hunterSeed.loot;delete hunterSeed.huntBest;delete hunterSeed.huntKills;
+ const huntGame=boot(hunterSeed);await huntGame.ready();assert.equal(huntGame.snap().state.loot.length,0,'old save migration');
+ huntGame.click('menuBtn');huntGame.act('hunt:1');assert.equal(huntGame.snap().hunt.wave,1);assert.ok(!huntGame.snap().objects.some(o=>o.type==='stairs'),'hunt has no descending stairs');
+ const oldXP=huntGame.snap().state.xp;
+ for(let wave=1;wave<=5;wave++){
+  for(let n=0;n<200&&huntGame.snap().modal!=='huntClear';n++)huntGame.tick(.2);
+  assert.equal(huntGame.snap().modal,'huntClear','wave '+wave+' clears');
+  assert.equal(huntGame.snap().state.huntBest,wave);assert.ok(huntGame.snap().state.loot.length>=wave,'guaranteed loot per wave');
+  if(wave<5)huntGame.act('huntNext');
+ }
+ assert.equal(huntGame.snap().state.cleared,false,'hunt elite does not complete story');assert.equal(huntGame.snap().state.counts.guardian,0,'hunt elite does not grant story quest');
+ const item=huntGame.snap().state.loot[0];huntGame.act('viewLoot');huntGame.act('equip:'+item.uid);assert.equal(huntGame.snap().state.weapon,item.uid);const invCount=huntGame.snap().state.loot.length;huntGame.act('sellLoot:'+item.uid);assert.equal(huntGame.snap().state.loot.length,invCount,'cannot sell equipped item');
+ huntGame.act('equip:sword');const beforeSell=huntGame.snap().state.gold;huntGame.act('sellLoot:'+item.uid);assert.equal(huntGame.snap().state.gold,beforeSell+item.value);assert.equal(huntGame.snap().state.loot.length,invCount-1);
+ huntGame.act('town');assert.equal(huntGame.snap().hunt,null);const huntSave=JSON.parse(huntGame.storage.get('ember-below-v1'));const huntResume=boot(huntSave);await huntResume.ready();assert.equal(huntResume.snap().state.huntBest,5);assert.ok(huntResume.snap().state.loot.length>0,'loot persists');
+ console.log('PASS: old save migration, five hunt waves, elite separation, guaranteed randomized loot, equip, sell guard, return and persistence.');
  console.log('PASS: movement, pause, combat, drops, XP, return, persistence, shop, armor, forge, spells, quest reward, 3 connected floors, boss reward, resume.');
 })().catch(e=>{console.error(e);process.exit(1)});
