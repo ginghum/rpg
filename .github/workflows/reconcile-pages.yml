@@ -34,4 +34,7 @@ jobs:
             const detail=await cancel.json().catch(()=>({}));
             console.log('Cancellation result: '+String(detail.message||'No detail'));
           }
+          const removed = await fetch(root+'/deployments/7470727865', {method:'DELETE',headers});
+          console.log('Remove retired deployment metadata: HTTP '+removed.status);
+          if (removed.status !== 204 && removed.status !== 404) throw new Error('Cannot remove obsolete deployment metadata');
           JS
